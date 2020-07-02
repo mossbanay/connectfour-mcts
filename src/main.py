@@ -1,25 +1,67 @@
 import gym
 import gym_connectfour
 
+import argparse
+import pandas as pd
 
-def main():
-    env = gym.make('ConnectFour-v0')
+from tqdm import trange
 
-    moves = [0, 1, 1, 2, 2, 3, 2, 3, 3, 5, 3]
-    move_idx = 0
+from agents import Agent, RandomAgent
+
+
+def play_game(env, first_agent: Agent, second_agent: Agent):
+    """Pit two agents again each other, returning the final reward of the game"""
 
     observation = env.reset()
-    done = False
+    timestep = (observation, 0, False, {})
 
-    while not done and move_idx < len(moves):
-        move = moves[move_idx]
-        move_idx += 1
+    first_agent.observe_first(timestep)
+    action = first_agent.select_action(observation)
 
-        observation, reward, done, info = env.step(move)
+    timestep = env.step(action)
+    observation, reward, done, info = timestep
 
-        print(env.render())
-        print(reward, done, info)
-        print(f'Legal moves: {env.legal_moves()}')
+    first_agent.observe(action, timestep)
+    second_agent.observe_first(timestep)
+
+    action = second_agent.select_action(observation)
+    timestep = env.step(action)
+    observation, reward, done, info = timestep
+
+    second_agent.observe(action, timestep)
+
+    agent_idx = 0
+    agents = [first_agent, second_agent]
+    while not done:
+        action = agents[agent_idx].select_action(observation)
+        timestep = env.step(action)
+        observation, reward, done, info = timestep
+        agents[agent_idx].observe(action, timestep)
+        agent_idx = (agent_idx + 1) % 2
+
+    return reward
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n-games', type=int, default=1000)
+
+    args = parser.parse_args()
+
+    env = gym.make('ConnectFour-v0')
+    first_agent = RandomAgent(env.action_space)
+    second_agent = RandomAgent(env.action_space)
+
+    data = []
+    for i in trange(args.n_games):
+        reward = play_game(env, first_agent, second_agent)
+        data.append({
+            'game_idx': i,
+            'reward': reward,
+        })
+
+    df = pd.DataFrame(data)
+    print(df.describe())
+
 
 if __name__ == '__main__':
     main()
