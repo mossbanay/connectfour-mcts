@@ -19,6 +19,8 @@ class ConnectFourEnv(gym.Env):
         self.reset()
 
     def step(self, action):
+        """Play out one action in the environment"""
+        
         for i in range(N_HEIGHT):
             if self.board[i][action] == 0:
                 self.board[i][action] = 1 if self.player_one_turn else 2
@@ -28,17 +30,21 @@ class ConnectFourEnv(gym.Env):
 
         observation = (self.board, self.player_one_turn)
         winner = self.winner()
-        done = winner is not None
+        done = winner is not None or self.legal_moves() == []
         reward = 1 if winner == 1 else -1 if winner == 2 else 0
         info = {}
 
         return (observation, reward, done, info)
 
     def reset(self):
+        """Reset the environment"""
+
         self.player_one_turn = True
         self.board = [[0 for _ in range(N_WIDTH)] for _ in range(N_HEIGHT)]
 
     def legal_moves(self):
+        """Find the current moves that are legal"""
+
         moves = []
         for i in range(N_WIDTH):
             if self.board[N_HEIGHT-1][i] == 0:
@@ -47,6 +53,7 @@ class ConnectFourEnv(gym.Env):
         return moves
 
     def winner(self):
+        """Determine if one of the players has won the game. Returning 1 or 2 if so and None otherwise"""
         # Check for a horizontal win
         for i in range(N_HEIGHT):
             streak = 0
@@ -156,6 +163,11 @@ class ConnectFourEnv(gym.Env):
         return None
 
     def render(self, mode='ansi', close=False):
+        """Render the board as a string"""
+
+        if mode != 'ansi':
+            raise NotImplementedError("Only ansi render mode is supported.")
+
         num_to_char = {
             0: ' ',
             1: '1',
