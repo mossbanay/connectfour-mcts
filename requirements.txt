@@ -5,18 +5,22 @@ cloudpickle==1.3.0
 distro==1.5.0
 future==0.18.2
 gym==0.17.2
--e git+git@github.com:mossbanay/connectfour-mcts.git@e602314e010902b821b877b31b50a7212981f3cd#egg=gym_connectfour
+-e git+git@github.com:/mossbanay/connectfour-mcts.git@3c23a445183ddaff0dd746dc8b12b4b1c9359a5a#egg=gym_connectfour
 importlib-metadata==1.6.1
 isort==4.3.21
 lazy-object-proxy==1.4.3
 mccabe==0.6.1
 numpy==1.19.0
+pandas==1.0.5
 pipx==0.15.4.0
 pyglet==1.5.0
 pylint==2.5.3
+python-dateutil==2.8.1
+pytz==2020.1
 scipy==1.5.0
 six==1.15.0
 toml==0.10.1
+tqdm==4.47.0
 typed-ast==1.4.1
 userpath==1.4.0
 wrapt==1.12.1
