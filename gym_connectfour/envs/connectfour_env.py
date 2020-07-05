@@ -184,3 +184,6 @@ class ConnectFourEnv(gym.Env):
 
 
         return '\n'.join(rows[::-1])
+
+    def set_state(self, observation):
+        raise NotImplementedError()

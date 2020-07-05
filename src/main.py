@@ -59,7 +59,8 @@ def main():
     args = parser.parse_args()
 
     env = gym.make('ConnectFour-v0')
-    first_agent = RandomAgent(env.action_space)
+    sim_env = gym.make('ConnectFour-v0')
+    first_agent = MCTSAgent(env.action_space, sim_env)
     second_agent = RandomAgent(env.action_space)
 
     data = []
