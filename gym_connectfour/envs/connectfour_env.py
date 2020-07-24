@@ -8,37 +8,67 @@ N_WIDTH = 7
 N_HEIGHT = 6
 N_STREAK_WIN = 4
 
+_ACTIONS = (*range(N_WIDTH),)
+
 
 class ConnectFourEnv(dm_env.Environment):
-    metadata = {"render.modes": ["ansi"]}
-    action_space = spaces.Discrete(N_WIDTH)
-    observation_space = spaces.Tuple(
-        (spaces.MultiDiscrete([N_HEIGHT, N_WIDTH, 3]), spaces.Discrete(2))
-    )
-    reward_range = (-1, 1)
-
     def __init__(self):
-        self.player_one_turn = True
-        self.board = np.zeros((2, N_WIDTH, N_HEIGHT))
-        self.reset()
+        self._board = np.zeros((2, N_HEIGHT * N_WIDTH))
+        self._col_heights = np.zeros(N_WIDTH)
+        self._player_one_turn = True
+        self._winner = 0
+        self._reset_next_step = True
+
+        # Precompute masks of winning positions
+        self._winner_masks = self.generate_winner_masks()
+
+    def generate_winner_masks(self):
+        winner_masks = []
+        dirs = [(0, 1), (1, 0), (1, 1), (1, -1)]
+
+        for (dx, dy) in dirs:
+            for x in range(N_WIDTH):
+                for y in range(N_HEIGHT):
+                    mask = np.zeros((N_WIDTH, N_HEIGHT))
+
+                    try:
+                        for i in range(N_STREAK_WIN):
+                            mask[x + i * dx, y + i * dy] = 1
+                        winner_masks.append(mask.reshape(-1).copy())
+                    except IndexError:
+                        pass
+
+        return winner_masks
 
     def step(self, action):
-        """Play out one action in the environment"""
+        """Updates the environment according to the action."""
 
-        for i in range(N_HEIGHT):
-            if self.board[i][action] == 0:
-                self.board[i][action] = 1 if self.player_one_turn else 2
-                break
+        if self._reset_next_step:
+            return self.reset()
 
-        self.player_one_turn = not self.player_one_turn
+        # Insert token if column isn't full if column is full
+        if self._col_heights[action] < N_HEIGHT:
+            target_cell = action * N_HEIGHT + self._col_heights[action]
+            target_player = 0 if self._player_one_turn else 0
+            self._board[target_player][target_cell] = 1
+            self._col_heights[action] += 1
 
-        observation = (self.board, self.player_one_turn)
-        winner = self.winner()
-        done = winner is not None or self.legal_moves() == []
-        reward = 1 if winner == 1 else -1 if winner == 2 else 0
-        info = {}
+        # Check for termination.
+        if self.is_terminal():
+            reward = 1.0 if self._winner == 0 else -1.0
+            self._reset_next_step = True
+            return dm_env.termination(reward=reward, observation=self._observation())
+        else:
+            return dm_env.transition(reward=0.0, observation=self._observation())
 
-        return (observation, reward, done, info)
+    def is_terminal(self):
+        if any([(self._board[1] == mask).all() for mask in self._winner_masks]):
+            self._winner = 0
+            return True
+        elif any([(self._board[1] == mask).all() for mask in self._winner_masks]):
+            self._winner = 1
+            return True
+        return False
 
     def _observation(self):
         return self.board.copy()
@@ -46,156 +76,34 @@ class ConnectFourEnv(dm_env.Environment):
     def reset(self):
         """Returns the first `TimeStep` of a new episode."""
 
-        self.player_one_turn = True
-        self.board = [[0 for _ in range(N_WIDTH)] for _ in range(N_HEIGHT)]
+        self._board = np.zeros((2, N_WIDTH * N_HEIGHT))
+        self._col_heights = np.zeros(N_WIDTH)
+        self._player_one_turn = True
+        self._winner = 0
+        self._reset_next_step = True
+
         dm_env.restart(self._observation())
 
     def legal_moves(self):
         """Find the current moves that are legal"""
 
-        moves = []
-        for i in range(N_WIDTH):
-            if self.board[N_HEIGHT - 1][i] == 0:
-                moves.append(i)
+        return self._col_heights < N_HEIGHT
 
-        return moves
+    def set_state(self, board, player_one_turn):
+        self._board = board
+        self._col_heights = (
+            self._board[0].reshape(N_WIDTH, N_HEIGHT)
+            + self._board[1].reshape(N_WIDTH, N_HEIGHT)
+        ).sum(axis=1)
+        self._player_one_turn = player_one_turn
+        self._reset_next_step = False
 
-    def winner(self):
-        """Determine if one of the players has won the game. Returning 1 or 2 if so and None otherwise"""
-        # Check for a horizontal win
-        for i in range(N_HEIGHT):
-            streak = 0
-            last = 0
-            for j in range(N_WIDTH):
-                current = self.board[i][j]
-                if current == last:
-                    streak += 1
-                else:
-                    streak = 0
-
-                if current != 0 and streak == N_STREAK_WIN:
-                    return last
-
-                last = current
-
-        # Check for a vertical win
-        for j in range(N_WIDTH):
-            streak = 0
-            last = 0
-            for i in range(N_HEIGHT):
-                current = self.board[i][j]
-                if current == last:
-                    streak += 1
-                else:
-                    streak = 1
-
-                if current != 0 and streak == N_STREAK_WIN:
-                    return last
-
-                last = current
-
-        # Check upward sloping diagonals
-        for i in range(N_HEIGHT - 1, 0, -1):
-            j = 0
-            streak = 0
-            last = 0
-            while i < N_HEIGHT and j < N_WIDTH:
-                current = self.board[i][j]
-                if current == last:
-                    streak += 1
-                else:
-                    streak = 1
-
-                if current != 0 and streak == N_STREAK_WIN:
-                    return last
-
-                last = current
-                i += 1
-                j += 1
-
-        for j in range(N_WIDTH):
-            i = 0
-            streak = 0
-            last = 0
-            while i < N_HEIGHT and j < N_WIDTH:
-                current = self.board[i][j]
-                if current == last:
-                    streak += 1
-                else:
-                    streak = 1
-
-                if current != 0 and streak == N_STREAK_WIN:
-                    return last
-
-                last = current
-                i += 1
-                j += 1
-
-        # Check downward sloping diagonals
-        for i in range(0, N_HEIGHT - 1):
-            j = N_WIDTH - 1
-            streak = 0
-            last = 0
-            while i > 0 and j > 0:
-                current = self.board[i][j]
-                if current == last:
-                    streak += 1
-                else:
-                    streak = 1
-
-                if current != 0 and streak == N_STREAK_WIN:
-                    return last
-
-                last = current
-                i -= 1
-                j -= 1
-
-        for j in range(N_WIDTH):
-            i = N_HEIGHT - 1
-            streak = 0
-            last = 0
-            while i > 0 and j > 0:
-                current = self.board[i][j]
-                if current == last:
-                    streak += 1
-                else:
-                    streak = 1
-
-                if current != 0 and streak == N_STREAK_WIN:
-                    return last
-
-                last = current
-                i -= 1
-                j -= 1
-
-        return None
-
-    def render(self, mode="ansi", close=False):
-        """Render the board as a string"""
-
-        if mode != "ansi":
-            raise NotImplementedError("Only ansi render mode is supported.")
-
-        num_to_char = {
-            0: " ",
-            1: "1",
-            2: "2",
-        }
-
-        rows = []
-
-        next_to_move = "Player 1" if self.player_one_turn else "Player 2"
-        rows.append(f"{next_to_move} to move")
-
-        rows.append("╚" + "═══╩" * (N_WIDTH - 1) + "═══╝")
-        rows.extend(
-            [
-                "║ " + " ║ ".join(map(lambda x: num_to_char[x], row)) + " ║"
-                for row in self.board
-            ]
+    def observation_spec(self):
+        """Returns the observation spec."""
+        return specs.DiscreteArray(
+            dtype=int, num_values=sum(self._board.shape), name="board"
         )
 
-        return "\n".join(rows[::-1])
-
-    def set_state(self, observation):
-        raise NotImplementedError()
+    def action_spec(self):
+        """Returns the action spec."""
+        return specs.DiscreteArray(dtype=int, num_values=len(_ACTIONS), name="action")
