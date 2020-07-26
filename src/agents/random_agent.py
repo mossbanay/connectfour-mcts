@@ -1,18 +1,14 @@
+import random
+
 from agents import Agent
 
 
-class RandomAgent(Agent):
-    def __init__(self, action_space):
-        self.action_space = action_space
+class RandomAgent:
+    def __init__(self, action_spec):
+        self.action_spec = action_spec
 
-    def select_action(self, observation):
-        return self.action_space.sample()
-
-    def observe_first(self, observation):
-        pass
-
-    def observe(self, action, next_timestep):
-        pass
+    def step(self, timestep):
+        return random.randrange(self.action_spec.minimum, self.action_spec.maximum + 1)
 
     def update(self):
         pass
