@@ -8,7 +8,7 @@ from tqdm import trange
 from agents import Agent, RandomAgent, MCTSAgent
 
 
-def play_game(env, agent):
+def play_game(env, agent, opponent_agent=None):
     """Play through one episode of the game, returning the final reward of the game"""
 
     timestep = env.reset()
@@ -20,6 +20,14 @@ def play_game(env, agent):
         if timestep.last():
             _ = agent.step(timestep)
             break
+
+        if opponent_agent is not None:
+            action = opponent_agent.step(timestep)
+            timestep = env.step(action)
+            agent.step(timestep)
+
+            if timestep.last():
+                break
 
     return {
         "reward": timestep.reward,
@@ -34,12 +42,12 @@ def main():
 
     env = gym_connectfour.envs.ConnectFourEnv()
 
-    # first_agent = MCTSAgent(env.action_spec())
-    second_agent = RandomAgent(env.action_spec())
+    agent = MCTSAgent(env.action_spec(), time_budget=1)
+    random_agent = RandomAgent(env.action_spec())
 
     data = []
     for i in trange(args.n_games):
-        result = play_game(env, second_agent)  # [first_agent, second_agent])
+        result = play_game(env, agent, opponent_agent=random_agent)
 
         data.append(
             {"game_idx": i, **result,}

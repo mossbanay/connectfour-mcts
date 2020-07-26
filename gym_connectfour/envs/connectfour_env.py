@@ -52,6 +52,8 @@ class ConnectFourEnv(dm_env.Environment):
             target_player = 0 if self._player_one_turn else 1
             self._board[target_player][target_cell] = True
             self._col_heights[action] += 1
+        else:
+            print("Illegal move!")
 
         self._player_one_turn = not self._player_one_turn
 
@@ -81,7 +83,9 @@ class ConnectFourEnv(dm_env.Environment):
         return False
 
     def _observation(self):
-        return self._board.copy()
+        obs = self._board.copy()
+        obs.flags.writeable = False
+        return obs
 
     def reset(self):
         """Returns the first `TimeStep` of a new episode."""
@@ -93,11 +97,6 @@ class ConnectFourEnv(dm_env.Environment):
         self._reset_next_step = False
 
         return dm_env.restart(self._observation())
-
-    def legal_moves(self):
-        """Find the current moves that are legal"""
-
-        return self._col_heights < N_HEIGHT
 
     def set_state(self, board, player_one_turn):
         self._board = board
@@ -117,3 +116,14 @@ class ConnectFourEnv(dm_env.Environment):
     def action_spec(self):
         """Returns the action spec."""
         return specs.DiscreteArray(dtype=int, num_values=len(_ACTIONS), name="action")
+
+    @staticmethod
+    def get_legal_moves(observation):
+        return [
+            idx
+            for idx, allowed in enumerate(
+                observation.sum(axis=0).reshape(N_WIDTH, N_HEIGHT).sum(axis=1)
+                < N_HEIGHT
+            )
+            if allowed
+        ]

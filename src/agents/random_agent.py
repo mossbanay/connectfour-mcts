@@ -1,4 +1,5 @@
-import random
+from random import choice
+from gym_connectfour import ConnectFourEnv
 
 from agents import Agent
 
@@ -8,7 +9,11 @@ class RandomAgent:
         self.action_spec = action_spec
 
     def step(self, timestep):
-        return random.randrange(self.action_spec.minimum, self.action_spec.maximum + 1)
+        if timestep.last():
+            return 0
+
+        legal_moves = ConnectFourEnv.get_legal_moves(timestep.observation)
+        return choice(legal_moves)
 
     def update(self):
         pass

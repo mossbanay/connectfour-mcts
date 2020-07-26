@@ -1,92 +1,133 @@
+from random import choice
+from gym_connectfour import ConnectFourEnv
+
+import time
+
 from math import sqrt, log
-from agents import Agent, RandomAgent
+from agents import RandomAgent
 
-class MCTSNode():
-    def __init__(self, parent):
-        self.parent = parent
-        self.children = []
+from collections import namedtuple
+
+
+EPSILON = 1e-5
+ValueInfo = namedtuple("ValueInfo", "n_visited sum_value")
+
+
+class MCTSNode:
+    def __init__(self, observation, c=sqrt(2)):
         self.n_visited = 0
-        self.sum_value = 0
+        self.c = c
 
-    @property
-    def value(self):
-        vhat = self.sum_value / self.n_visited
-        explore = self.c * sqrt(log(self.parent.n_visited) / self.n_visited)
-        return self.sum_value / self.n_visited
+        self.legal_moves = ConnectFourEnv.get_legal_moves(observation)
+        self.children = {action: ValueInfo(0, 0) for action in self.legal_moves}
 
-    @property
-    def best_child(self):
-        best_val = float('-inf')
-        node = None
-
-        for action, child in self.children:
-            if child.value > best_val:
-                node = child
-
-        return node
-
-    @property
     def best_action(self):
-        best_val = float('-inf')
-        best_action = None
+        best_value = float("-inf")
+        best_act = None
 
-        for action, child in self.children:
-            if child.value > best_val:
-                best_action = action
+        for action, value_info in self.children.items():
+            v = value_info.sum_value / value_info.n_visited
+            v += self.c * sqrt(log(self.n_visited) / (value_info.n_visited + EPSILON))
 
-        return best_action
+            if v > best_value:
+                best_value = v
+                best_act = action
 
-    def add_child(self, action, node):
-        self.children.append((action, node))
+        return best_act
 
-class RandomAgent(Agent):
-    def __init__(self, action_space, model):
-        self.action_space = action_space
-        self.model = model
+    def get_leaf_actions(self):
+        leaf_actions = []
+
+        for action, value_info in self.children.items():
+            if value_info.n_visited == 0:
+                leaf_actions.append(action)
+
+        return leaf_actions
+
+    def update(self, action, win):
+        value_info = self.children[action]
+        self.children[action] = ValueInfo(
+            value_info.n_visited + 1, value_info.sum_value + win
+        )
+
+
+class MCTSAgent:
+    def __init__(self, action_spec, time_budget):
+        self.action_spec = action_spec
+
+        self.sim_env = ConnectFourEnv()
+        self.opponent_agent = RandomAgent(action_spec)
+
+        self.time_budget = time_budget
 
         self.policy = {}
 
-        # State
-        self.prev_nodes = []
+    def step(self, timestep):
+        if timestep.last():
+            return 0
 
-    def select_action(self, observation):
-        if observation not in self.policy:
-            # Create an empty node
-            self.policy[observation] = Node(observation, None)
+        # Ensure the current state is added into policy
+        if timestep.observation not in self.policy:
+            self.policy[timestep.observation] = MCTSNode(timestep.observation)
 
-        cur_node = self.policy[observation]
+        begin_time = time.time()
 
-        # Find leaf node by looking at the best for each level
-        while len(cur_node.children) > 0:
-            cur_node = cur_node.best_child
+        # Run rollouts
+        n_updates = 0
+        while time.time() < begin_time + self.time_budget:
+            self.update(timestep.observation)
+            n_updates += 1
 
-        if cur_node.n_visited == 0:
-            # If the leaf node has not been visited before, do a rollout
-            self.rollout(cur_node)
-        else:
-            # If it has been visited before, expand the children
-            self.model.set_state(observation)
-            for action in self.model.legal_moves():
-                cur_node.add_child(action, Node(cur_node))
+        print(f"Ran {n_updates} in {time.time() - begin_time:.2f}s")
 
-            # Pick an arbitrary child and do a rollout
-            self.rollout(cur_node.best_child)
+        return self.policy[timestep.observation].best_action()
 
-        if observation in self.policy:
+    def update(self, observation):
+        # Set simulator to the same state
+        self.sim_env.set_state(observation, True)
+
+        # The path we take is a list of (observation, action) tuples
+        path = []
+        timestep = None
+
+        # We should be guaranteed to be able to observe at least one more timestep
+        # since we should not have been passed in a final timestep
+        while True:
+            if observation not in self.policy:
+                print("uh oh")
+
             cur_node = self.policy[observation]
-            if len(cur_node.children) > 0:
-                return cur_node.best_action
+            leaf_actions = cur_node.get_leaf_actions()
 
-        return self.action_space.sample()
+            if len(leaf_actions) == 0:
+                # If we've expanded all of this node, select the best action and take a step in env
+                action = cur_node.best_action()
+                path.append(observation.copy(), action)
+                timestep = self.sim_env.step(action)
+                if timestep.last():
+                    break
+                timestep = self.sim_env.step(self.opponent_agent.step(timestep))
+                if timestep.last():
+                    break
 
-    def observe_first(self, observation):
-        pass
+                observation = timestep.observation
+            else:
+                # Expand the first leaf in this node
+                action = leaf_actions[0]
+                path.append((observation.copy(), action))
 
-    def observe(self, action, next_timestep):
-        pass
+                # Rollout
+                timestep = self.rollout(self.sim_env.step(action))
+                break
 
-    def update(self):
-        pass
+        # Backpropagation
+        for obs, action in path:
+            self.policy[obs].update(action, timestep.reward)
 
-    def rollout(self, state):
-        pass
+    def rollout(self, timestep):
+        while not timestep.last():
+            timestep = self.sim_env.step(
+                choice(ConnectFourEnv.get_legal_moves(timestep.observation))
+            )
+
+        return timestep
