@@ -13,10 +13,10 @@ _ACTIONS = (*range(N_WIDTH),)
 
 class ConnectFourEnv(dm_env.Environment):
     def __init__(self):
-        self._board = np.zeros((2, N_HEIGHT * N_WIDTH))
-        self._col_heights = np.zeros(N_WIDTH)
+        self._board = np.zeros((2, N_HEIGHT * N_WIDTH), dtype=np.bool)
+        self._col_heights = np.zeros(N_WIDTH, dtype=np.int8)
         self._player_one_turn = True
-        self._winner = 0
+        self._winner = None
         self._reset_next_step = True
 
         # Precompute masks of winning positions
@@ -29,11 +29,11 @@ class ConnectFourEnv(dm_env.Environment):
         for (dx, dy) in dirs:
             for x in range(N_WIDTH):
                 for y in range(N_HEIGHT):
-                    mask = np.zeros((N_WIDTH, N_HEIGHT))
+                    mask = np.zeros((N_WIDTH, N_HEIGHT), dtype=np.bool)
 
                     try:
                         for i in range(N_STREAK_WIN):
-                            mask[x + i * dx, y + i * dy] = 1
+                            mask[x + i * dx, y + i * dy] = True
                         winner_masks.append(mask.reshape(-1).copy())
                     except IndexError:
                         pass
@@ -49,40 +49,50 @@ class ConnectFourEnv(dm_env.Environment):
         # Insert token if column isn't full if column is full
         if self._col_heights[action] < N_HEIGHT:
             target_cell = action * N_HEIGHT + self._col_heights[action]
-            target_player = 0 if self._player_one_turn else 0
-            self._board[target_player][target_cell] = 1
+            target_player = 0 if self._player_one_turn else 1
+            self._board[target_player][target_cell] = True
             self._col_heights[action] += 1
+
+        self._player_one_turn = not self._player_one_turn
 
         # Check for termination.
         if self.is_terminal():
-            reward = 1.0 if self._winner == 0 else -1.0
+            reward = 1.0 if self._winner == 0 else -1.0 if self._winner == 1 else 0.0
             self._reset_next_step = True
             return dm_env.termination(reward=reward, observation=self._observation())
         else:
             return dm_env.transition(reward=0.0, observation=self._observation())
 
     def is_terminal(self):
-        if any([(self._board[1] == mask).all() for mask in self._winner_masks]):
+        if any(
+            [((self._board[0] & mask) == mask).all() for mask in self._winner_masks]
+        ):
             self._winner = 0
             return True
-        elif any([(self._board[1] == mask).all() for mask in self._winner_masks]):
+        elif any(
+            [((self._board[1] & mask) == mask).all() for mask in self._winner_masks]
+        ):
             self._winner = 1
             return True
+        elif self._col_heights.sum() == N_HEIGHT * N_WIDTH:
+            self._winner = None
+            return True
+
         return False
 
     def _observation(self):
-        return self.board.copy()
+        return self._board.copy()
 
     def reset(self):
         """Returns the first `TimeStep` of a new episode."""
 
-        self._board = np.zeros((2, N_WIDTH * N_HEIGHT))
-        self._col_heights = np.zeros(N_WIDTH)
+        self._board = np.zeros((2, N_HEIGHT * N_WIDTH), dtype=np.int8)
+        self._col_heights = np.zeros(N_WIDTH, dtype=np.int8)
         self._player_one_turn = True
         self._winner = 0
-        self._reset_next_step = True
+        self._reset_next_step = False
 
-        dm_env.restart(self._observation())
+        return dm_env.restart(self._observation())
 
     def legal_moves(self):
         """Find the current moves that are legal"""
