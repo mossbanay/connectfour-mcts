@@ -21,17 +21,28 @@ class MCTSNode:
         self.legal_moves = ConnectFourEnv.get_legal_moves(observation)
         self.children = {action: ValueInfo(0, 0) for action in self.legal_moves}
 
+        if self.legal_moves == []:
+            print("uh oh")
+
     def best_action(self):
         best_value = float("-inf")
         best_act = None
 
         for action, value_info in self.children.items():
-            v = value_info.sum_value / value_info.n_visited
-            v += self.c * sqrt(log(self.n_visited) / (value_info.n_visited + EPSILON))
+            v = value_info.sum_value / (value_info.n_visited + EPSILON)
+            v += (
+                self.c
+                * sqrt(log(self.n_visited + EPSILON) / (value_info.n_visited + EPSILON))
+                if self.n_visited > 0
+                else 0
+            )
 
             if v > best_value:
                 best_value = v
                 best_act = action
+
+        if best_act is None:
+            print("uh oh")
 
         return best_act
 
@@ -67,20 +78,22 @@ class MCTSAgent:
             return 0
 
         # Ensure the current state is added into policy
-        if timestep.observation not in self.policy:
-            self.policy[timestep.observation] = MCTSNode(timestep.observation)
+        if str(timestep.observation) not in self.policy:
+            self.policy[str(timestep.observation)] = MCTSNode(timestep.observation)
+
+        self.policy[str(timestep.observation)].best_action()
 
         begin_time = time.time()
 
         # Run rollouts
         n_updates = 0
         while time.time() < begin_time + self.time_budget:
-            self.update(timestep.observation)
+            self.update(timestep.observation.copy())
             n_updates += 1
 
-        print(f"Ran {n_updates} in {time.time() - begin_time:.2f}s")
+        # print(f"Ran {n_updates} in {time.time() - begin_time:.2f}s")
 
-        return self.policy[timestep.observation].best_action()
+        return self.policy[str(timestep.observation)].best_action()
 
     def update(self, observation):
         # Set simulator to the same state
@@ -90,39 +103,47 @@ class MCTSAgent:
         path = []
         timestep = None
 
+        self.policy[str(observation)].best_action()
+
         # We should be guaranteed to be able to observe at least one more timestep
         # since we should not have been passed in a final timestep
         while True:
-            if observation not in self.policy:
-                print("uh oh")
+            if str(observation) not in self.policy:
+                # Expand this observation
+                node = MCTSNode(observation)
+                if node.get_leaf_actions() == []:
+                    break
+                self.policy[str(observation)] = node
+                action = node.get_leaf_actions()[0]
+                path.append((observation.copy(), action))
+                timestep = self.rollout(self.sim_env.step(action))
+                break
 
-            cur_node = self.policy[observation]
+            cur_node = self.policy[str(observation)]
             leaf_actions = cur_node.get_leaf_actions()
+
+            action = None
 
             if len(leaf_actions) == 0:
                 # If we've expanded all of this node, select the best action and take a step in env
                 action = cur_node.best_action()
-                path.append(observation.copy(), action)
-                timestep = self.sim_env.step(action)
-                if timestep.last():
-                    break
-                timestep = self.sim_env.step(self.opponent_agent.step(timestep))
-                if timestep.last():
-                    break
-
-                observation = timestep.observation
             else:
                 # Expand the first leaf in this node
                 action = leaf_actions[0]
-                path.append((observation.copy(), action))
 
-                # Rollout
-                timestep = self.rollout(self.sim_env.step(action))
+            path.append((observation.copy(), action))
+            timestep = self.sim_env.step(action)
+            if timestep.last():
                 break
+            timestep = self.sim_env.step(self.opponent_agent.step(timestep))
+            if timestep.last():
+                break
+
+            observation = timestep.observation
 
         # Backpropagation
         for obs, action in path:
-            self.policy[obs].update(action, timestep.reward)
+            self.policy[str(obs)].update(action, timestep.reward)
 
     def rollout(self, timestep):
         while not timestep.last():

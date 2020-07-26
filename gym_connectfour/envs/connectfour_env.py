@@ -83,9 +83,7 @@ class ConnectFourEnv(dm_env.Environment):
         return False
 
     def _observation(self):
-        obs = self._board.copy()
-        obs.flags.writeable = False
-        return obs
+        return self._board.copy()
 
     def reset(self):
         """Returns the first `TimeStep` of a new episode."""

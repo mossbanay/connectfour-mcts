@@ -36,13 +36,13 @@ def play_game(env, agent, opponent_agent=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n-games", type=int, default=1000)
+    parser.add_argument("--n-games", type=int, default=50)
 
     args = parser.parse_args()
 
     env = gym_connectfour.envs.ConnectFourEnv()
 
-    agent = MCTSAgent(env.action_spec(), time_budget=1)
+    agent = MCTSAgent(env.action_spec(), time_budget=0.1)
     random_agent = RandomAgent(env.action_spec())
 
     data = []
