@@ -78,22 +78,22 @@ class MCTSAgent:
             return 0
 
         # Ensure the current state is added into policy
-        if str(timestep.observation) not in self.policy:
-            self.policy[str(timestep.observation)] = MCTSNode(timestep.observation)
+        if timestep.observation not in self.policy:
+            self.policy[timestep.observation] = MCTSNode(timestep.observation)
 
-        self.policy[str(timestep.observation)].best_action()
+        self.policy[timestep.observation].best_action()
 
         begin_time = time.time()
 
         # Run rollouts
         n_updates = 0
         while time.time() < begin_time + self.time_budget:
-            self.update(timestep.observation.copy())
+            self.update(timestep.observation)
             n_updates += 1
 
         # print(f"Ran {n_updates} in {time.time() - begin_time:.2f}s")
 
-        return self.policy[str(timestep.observation)].best_action()
+        return self.policy[timestep.observation].best_action()
 
     def update(self, observation):
         # Set simulator to the same state
@@ -103,23 +103,23 @@ class MCTSAgent:
         path = []
         timestep = None
 
-        self.policy[str(observation)].best_action()
+        self.policy[observation].best_action()
 
         # We should be guaranteed to be able to observe at least one more timestep
         # since we should not have been passed in a final timestep
         while True:
-            if str(observation) not in self.policy:
+            if observation not in self.policy:
                 # Expand this observation
                 node = MCTSNode(observation)
                 if node.get_leaf_actions() == []:
                     break
-                self.policy[str(observation)] = node
+                self.policy[observation] = node
                 action = node.get_leaf_actions()[0]
-                path.append((observation.copy(), action))
+                path.append((observation, action))
                 timestep = self.rollout(self.sim_env.step(action))
                 break
 
-            cur_node = self.policy[str(observation)]
+            cur_node = self.policy[observation]
             leaf_actions = cur_node.get_leaf_actions()
 
             action = None
@@ -131,7 +131,7 @@ class MCTSAgent:
                 # Expand the first leaf in this node
                 action = leaf_actions[0]
 
-            path.append((observation.copy(), action))
+            path.append((observation, action))
             timestep = self.sim_env.step(action)
             if timestep.last():
                 break
@@ -143,7 +143,7 @@ class MCTSAgent:
 
         # Backpropagation
         for obs, action in path:
-            self.policy[str(obs)].update(action, timestep.reward)
+            self.policy[obs].update(action, timestep.reward)
 
     def rollout(self, timestep):
         while not timestep.last():
