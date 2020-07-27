@@ -38,14 +38,29 @@ class ConnectFourEnv(dm_env.Environment):
             for x in range(N_WIDTH):
                 for y in range(N_HEIGHT):
                     mask = 0
+                    valid = True
 
-                    try:
-                        for i in range(N_STREAK_WIN):
-                            mask |= 1 << ((x + i * dx) * N_HEIGHT + y + i * dy)
+                    cx = x
+                    cy = y
 
+                    for _ in range(N_STREAK_WIN):
+                        cell_location = cx * N_HEIGHT + cy
+
+                        cell_in_limits = 0 <= cell_location < N_HEIGHT * N_WIDTH
+                        x_in_limits = 0 <= cx < N_WIDTH
+                        y_in_limits = 0 <= cy < N_HEIGHT
+
+                        if not all([cell_in_limits, x_in_limits, y_in_limits]):
+                            valid = False
+                            break
+
+                        mask |= 1 << cell_location
+
+                        cx += dx
+                        cy += dy
+
+                    if valid:
                         winner_masks.append(mask)
-                    except IndexError:
-                        pass
 
         return winner_masks
 
