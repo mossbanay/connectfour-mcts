@@ -152,3 +152,6 @@ class MCTSAgent:
             )
 
         return timestep
+
+    def set_time_budget(self, time_budget):
+        self.time_budget = time_budget
