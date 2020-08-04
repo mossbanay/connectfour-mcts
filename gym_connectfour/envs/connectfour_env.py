@@ -1,6 +1,8 @@
 import dm_env
 from dm_env import specs
 
+from numba import jit, njit
+
 import numpy as np
 
 
@@ -11,12 +13,36 @@ N_STREAK_WIN = 4
 _ACTIONS = (*range(N_WIDTH),)
 
 
+@njit()
 def popcount(x):
     b = 0
     while x > 0:
         x &= x - 1
         b += 1
     return b
+
+
+@njit()
+def is_game_over(winner_masks, player_mask):
+    for mask in winner_masks:
+        if (mask & player_mask) == mask:
+            return True
+    return False
+
+
+@jit()
+def get_legal_moves_fast(player_one_mask, player_two_mask):
+    board = player_one_mask + player_two_mask
+    top_slot = 1 << (N_HEIGHT - 1)
+    moves = []
+
+    for idx in range(N_WIDTH):
+        if (board & top_slot) != top_slot:
+            moves.append(idx)
+
+        top_slot <<= N_HEIGHT
+
+    return moves
 
 
 class ConnectFourEnv(dm_env.Environment):
@@ -28,7 +54,7 @@ class ConnectFourEnv(dm_env.Environment):
         self._reset_next_step = True
 
         # Precompute masks of winning positions
-        self._winner_masks = self.generate_winner_masks()
+        self._winner_masks = tuple(self.generate_winner_masks())
 
     def generate_winner_masks(self):
         winner_masks = []
@@ -90,10 +116,10 @@ class ConnectFourEnv(dm_env.Environment):
             return dm_env.transition(reward=0.0, observation=self._observation())
 
     def is_terminal(self):
-        if any((mask & self._board[0]) == mask for mask in self._winner_masks):
+        if is_game_over(self._winner_masks, self._board[0]):
             self._winner = 0
             return True
-        elif any((mask & self._board[1]) == mask for mask in self._winner_masks):
+        elif is_game_over(self._winner_masks, self._board[1]):
             self._winner = 1
             return True
         elif self._col_heights.sum() == N_HEIGHT * N_WIDTH:
@@ -142,14 +168,4 @@ class ConnectFourEnv(dm_env.Environment):
 
     @staticmethod
     def get_legal_moves(observation):
-        board = observation[0] + observation[1]
-        top_slot = 1 << (N_HEIGHT - 1)
-        moves = []
-
-        for idx in range(N_WIDTH):
-            if (board & top_slot) != top_slot:
-                moves.append(idx)
-
-            top_slot <<= N_HEIGHT
-
-        return moves
+        return get_legal_moves_fast(observation[0], observation[1])

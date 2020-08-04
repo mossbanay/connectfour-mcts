@@ -91,7 +91,7 @@ class MCTSAgent:
             self.update(timestep.observation)
             n_updates += 1
 
-        # print(f"Ran {n_updates} in {time.time() - begin_time:.2f}s")
+        # print(f"Ran {n_updates} in {time.time() - begin_time:.2f}s or {n_updates/self.time_budget:.2f}rollouts/s")
 
         return self.policy[timestep.observation].best_action()
 
